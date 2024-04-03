@@ -1,0 +1,53 @@
+import pandas as pd
+import datetime as dt
+import ccxt
+import plotly.graph_objects as go
+
+# Ticker and timeframe
+TICKER = "BTC/USDT"
+INTERVAL = "1d"
+
+# Backtest start/end date
+START = dt.datetime(2017, 8, 17)
+END = dt.datetime.now()
+
+# Initialize the Binance exchange object
+exchange = ccxt.binance()
+
+# Fetch kline data
+kline_data = exchange.fetch_ohlcv(TICKER, INTERVAL, since=exchange.parse8601(str(START.timestamp() * 1000)))
+
+# Create a DataFrame from the kline data
+df = pd.DataFrame(kline_data, columns=["timestamp", "open", "high", "low", "close", "volume"])
+
+# Convert timestamp to datetime
+df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+
+# Set timestamp as the index
+df.set_index("timestamp", inplace=True)
+
+def heikinashi(df: pd.DataFrame) -> pd.DataFrame:
+    df_HA = df.copy()
+    df_HA["Close"] = (df_HA["open"] + df_HA["high"] + df_HA["low"] + df_HA["close"]) / 4
+
+    for i in range(0, len(df)):
+        if i == 0:
+            df_HA["open"][i] = ((df_HA["open"][i] + df_HA["close"][i]) / 2)
+        else:
+            df_HA["open"][i] = ((df_HA["open"][i - 1] + df_HA["close"][i - 1]) / 2)
+
+    df_HA["high"] = df_HA[["open", "close", "high"]].max(axis=1)
+    df_HA["low"] = df_HA[["open", "close", "low"]].min(axis=1)
+    return df_HA
+
+# Apply Heikin Ashi transformation
+df_HA = heikinashi(df)
+
+# Create a candlestick chart
+fig = go.Figure(data=[go.Candlestick(x=df_HA.index, open=df_HA["open"], high=df_HA["high"], low=df_HA["low"], close=df_HA["Close"])])
+
+# Update layout
+fig.update_layout(title="BTC HA Candles", xaxis_title="Date", yaxis_title="Price")
+
+# Show the plot
+fig.show()
